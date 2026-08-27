@@ -5,108 +5,45 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 
-def _load_credentials(creds_json: str) -> dict:
-    """Parse service-account JSON with narrow recovery for common paste damage.
-
-    Accepted recovery is limited to a missing outer brace or two semantically
-    equivalent JSON objects pasted consecutively. Conflicting objects and
-    arbitrary trailing content remain hard failures.
-    """
-    value = creds_json.strip()
-    quote_chars = ('"', "'")
-    candidates = {
-        "raw": value,
-        "add_open": "{" + value,
-        "add_close": value + "}",
-        "add_both": "{" + value + "}",
-    }
-    missing = object()
-    credentials = missing
+def _parse_credential_object(value: str) -> dict:
+    """Parse one object, allowing only a missing opening and/or closing brace."""
+    candidates = (value, "{" + value, value + "}", "{" + value + "}")
     errors = []
-    segment_diagnostics = []
-    seen = set()
-    for label, candidate in candidates.items():
-        if candidate in seen:
-            continue
-        seen.add(candidate)
+    for candidate in dict.fromkeys(candidates):
         try:
-            credentials = json.loads(candidate)
-            break
+            parsed = json.loads(candidate)
         except json.JSONDecodeError as exc:
-            errors.append(f"{label}:{exc.msg}@{exc.lineno}:{exc.colno}")
-    if credentials is missing:
-        decoder = json.JSONDecoder()
-        for candidate in candidates.values():
-            try:
-                first, end = decoder.raw_decode(candidate)
-            except json.JSONDecodeError:
-                continue
-            remainder = candidate[end:].strip()
-            if not remainder:
-                continue
-            remainder_fragments = [remainder]
-            for literal_newline in ("\\n", "\\r\\n"):
-                if remainder.startswith(literal_newline):
-                    remainder_fragments.append(remainder[len(literal_newline):])
-            assignment_prefix = "GOOGLE_CREDS_JSON="
-            if remainder.startswith(assignment_prefix):
-                remainder_fragments.append(remainder[len(assignment_prefix):].strip())
-            remainder_candidates = []
-            for fragment in remainder_fragments:
-                remainder_candidates.extend((
-                    fragment,
-                    "{" + fragment,
-                    fragment + "}",
-                    "{" + fragment + "}",
-                ))
-            valid_second_seen = False
-            for second_candidate in dict.fromkeys(remainder_candidates):
-                try:
-                    second = json.loads(second_candidate)
-                except json.JSONDecodeError:
-                    continue
-                valid_second_seen = True
-                segment_diagnostics.append(
-                    "first_type=" + type(first).__name__
-                    + ",second_type=" + type(second).__name__
-                    + f",same={first == second}"
-                    + f",first_fields={len(first) if isinstance(first, dict) else -1}"
-                    + f",second_fields={len(second) if isinstance(second, dict) else -1}"
-                    + ",fields_same="
-                    + str(
-                        set(first) == set(second)
-                        if isinstance(first, dict) and isinstance(second, dict)
-                        else False
-                    )
-                )
-                if isinstance(first, dict) and first == second:
-                    credentials = first
-                    break
-            if not valid_second_seen:
-                segment_diagnostics.append(
-                    f"first_type={type(first).__name__},remaining_chars={len(remainder)},"
-                    f"rem_open_brace={remainder.startswith('{')},"
-                    f"rem_close_brace={remainder.endswith('}')},"
-                    f"rem_open_quote={remainder.startswith(quote_chars)},"
-                    f"rem_close_quote={remainder.endswith(quote_chars)},"
-                    f"rem_prefix_ord={','.join(str(ord(char)) for char in remainder[:8])}"
-                )
-            if credentials is not missing:
-                break
-    if credentials is missing:
-        shape = (
-            f"chars={len(value)},lines={value.count(chr(10)) + 1},"
-            f"open_brace={value.startswith('{')},close_brace={value.endswith('}')},"
-            f"open_quote={value.startswith(quote_chars)},"
-            f"close_quote={value.endswith(quote_chars)}"
-        )
-        raise ValueError(
-            "GOOGLE_CREDS_JSON must be valid JSON "
-            f"({shape}; attempts={';'.join(errors)}; segments={';'.join(segment_diagnostics)})"
-        )
-    if not isinstance(credentials, dict):
-        raise ValueError("GOOGLE_CREDS_JSON must contain a JSON object")
-    return credentials
+            errors.append(f"{exc.msg}@{exc.lineno}:{exc.colno}")
+            continue
+        if not isinstance(parsed, dict):
+            raise ValueError("GOOGLE_CREDS_JSON must contain a JSON object")
+        return parsed
+    raise ValueError(
+        "GOOGLE_CREDS_JSON must be valid JSON "
+        f"(attempts={';'.join(errors)})"
+    )
+
+
+def _load_credentials(creds_json: str) -> dict:
+    """Parse one credential or the known duplicated assignment paste shape."""
+    value = creds_json.strip()
+    try:
+        return _parse_credential_object(value)
+    except ValueError as exc:
+        primary_message = str(exc)
+
+    separators = ("\nGOOGLE_CREDS_JSON=", "\\nGOOGLE_CREDS_JSON=")
+    for separator in separators:
+        if value.count(separator) != 1:
+            continue
+        first_raw, second_raw = value.split(separator, 1)
+        first = _parse_credential_object(first_raw.strip())
+        second = _parse_credential_object(second_raw.strip())
+        if first != second:
+            raise ValueError("GOOGLE_CREDS_JSON contains conflicting credential objects")
+        return first
+
+    raise ValueError(primary_message)
 
 
 def get_gsheet():
