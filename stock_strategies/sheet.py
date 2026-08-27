@@ -5,9 +5,23 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 
+def _load_credentials(creds_json: str) -> dict:
+    """Parse service-account JSON, including secrets pasted without outer braces."""
+    value = creds_json.strip()
+    try:
+        credentials = json.loads(value)
+    except json.JSONDecodeError:
+        credentials = json.loads("{" + value + "}")
+    if isinstance(credentials, str):
+        credentials = json.loads(credentials)
+    if not isinstance(credentials, dict):
+        raise ValueError("GOOGLE_CREDS_JSON must contain a JSON object")
+    return credentials
+
+
 def get_gsheet():
     creds_json = os.environ["GOOGLE_CREDS_JSON"]
-    creds_dict = json.loads(creds_json)
+    creds_dict = _load_credentials(creds_json)
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
