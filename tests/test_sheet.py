@@ -21,3 +21,8 @@ def test_load_credentials_accepts_json_without_outer_braces():
 def test_load_credentials_rejects_non_object_json():
     with pytest.raises(ValueError, match="must contain a JSON object"):
         _load_credentials("[]")
+
+
+def test_load_credentials_rejects_invalid_json():
+    with pytest.raises(ValueError, match="must be valid JSON"):
+        _load_credentials("not json")

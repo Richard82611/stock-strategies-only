@@ -11,7 +11,10 @@ def _load_credentials(creds_json: str) -> dict:
     try:
         credentials = json.loads(value)
     except json.JSONDecodeError:
-        credentials = json.loads("{" + value + "}")
+        try:
+            credentials = json.loads("{" + value + "}")
+        except json.JSONDecodeError as exc:
+            raise ValueError("GOOGLE_CREDS_JSON must be valid JSON") from exc
     if not isinstance(credentials, dict):
         raise ValueError("GOOGLE_CREDS_JSON must contain a JSON object")
     return credentials
