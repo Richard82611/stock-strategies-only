@@ -28,11 +28,12 @@ def _load_credentials(creds_json: str) -> dict:
         except json.JSONDecodeError as exc:
             errors.append(f"{label}:{exc.msg}@{exc.lineno}:{exc.colno}")
     if credentials is missing:
+        quote_chars = ('"', "'")
         shape = (
             f"chars={len(value)},lines={value.count(chr(10)) + 1},"
             f"open_brace={value.startswith('{')},close_brace={value.endswith('}')},"
-            f"open_quote={value.startswith(('\"', chr(39)))},"
-            f"close_quote={value.endswith(('\"', chr(39)))}"
+            f"open_quote={value.startswith(quote_chars)},"
+            f"close_quote={value.endswith(quote_chars)}"
         )
         raise ValueError(
             "GOOGLE_CREDS_JSON must be valid JSON "
