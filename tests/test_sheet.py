@@ -13,8 +13,9 @@ def test_load_credentials_accepts_service_account_json():
 
 def test_load_credentials_accepts_json_without_outer_braces():
     credentials = {"type": "service_account", "project_id": "example"}
+    value = json.dumps(credentials)[1:-1]
 
-    assert _load_credentials('"type":"service_account","project_id":"example"') == credentials
+    assert _load_credentials(value) == credentials
 
 
 def test_load_credentials_rejects_non_object_json():
