@@ -18,7 +18,9 @@ def evaluate(stock_id: str, name: str, strategy: dict | None = None) -> Optional
     result = {
         "stock_id": stock_id,
         "name": name,
-        "date": datetime.now().strftime("%Y-%m-%d"),
+        # 僅在取得行情後填入，避免把執行日誤寫成行情資料日。
+        "date": "",
+        "run_date": datetime.now().strftime("%Y-%m-%d"),
         "strategy_id": (strategy or {}).get("id", "default"),
         "risk_notes": [],
     }
@@ -35,6 +37,10 @@ def evaluate(stock_id: str, name: str, strategy: dict | None = None) -> Optional
         )
 
         px = get_price_history(stock_id, params["backtest_years"])
+        if not px.empty and "date" in px.columns:
+            latest_date = pd.to_datetime(px.iloc[-1]["date"], errors="coerce")
+            if pd.notna(latest_date):
+                result["date"] = latest_date.strftime("%Y-%m-%d")
         if len(px) < 100:
             result["action"] = "SKIP"
             result["risk_notes"].append("價格資料不足")

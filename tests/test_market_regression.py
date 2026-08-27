@@ -13,6 +13,7 @@ def test_market_state_bullish(monkeypatch):
     state = market.get_market_state(ma_period=20)
     assert state["bullish"] is True
     assert state["close"] == close[-1]
+    assert state["date"] == dates[-1].strftime("%Y-%m-%d")
 
 
 def test_market_state_handles_empty(monkeypatch):
