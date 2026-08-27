@@ -18,6 +18,20 @@ def test_load_credentials_accepts_json_without_outer_braces():
     assert _load_credentials(value) == credentials
 
 
+def test_load_credentials_accepts_json_without_opening_brace():
+    credentials = {"type": "service_account", "project_id": "example"}
+    value = json.dumps(credentials)[1:]
+
+    assert _load_credentials(value) == credentials
+
+
+def test_load_credentials_accepts_json_without_closing_brace():
+    credentials = {"type": "service_account", "project_id": "example"}
+    value = json.dumps(credentials)[:-1]
+
+    assert _load_credentials(value) == credentials
+
+
 def test_load_credentials_rejects_non_object_json():
     with pytest.raises(ValueError, match="must contain a JSON object"):
         _load_credentials("[]")

@@ -6,15 +6,19 @@ from google.oauth2.service_account import Credentials
 
 
 def _load_credentials(creds_json: str) -> dict:
-    """Parse service-account JSON, including secrets pasted without outer braces."""
+    """Parse service-account JSON, including a paste missing either outer brace."""
     value = creds_json.strip()
-    try:
-        credentials = json.loads(value)
-    except json.JSONDecodeError:
+    candidates = (value, "{" + value, value + "}", "{" + value + "}")
+    missing = object()
+    credentials = missing
+    for candidate in dict.fromkeys(candidates):
         try:
-            credentials = json.loads("{" + value + "}")
-        except json.JSONDecodeError as exc:
-            raise ValueError("GOOGLE_CREDS_JSON must be valid JSON") from exc
+            credentials = json.loads(candidate)
+            break
+        except json.JSONDecodeError:
+            continue
+    if credentials is missing:
+        raise ValueError("GOOGLE_CREDS_JSON must be valid JSON")
     if not isinstance(credentials, dict):
         raise ValueError("GOOGLE_CREDS_JSON must contain a JSON object")
     return credentials
