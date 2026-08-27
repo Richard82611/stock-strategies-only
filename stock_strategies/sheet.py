@@ -8,11 +8,12 @@ from google.oauth2.service_account import Credentials
 def _load_credentials(creds_json: str) -> dict:
     """Parse service-account JSON with narrow recovery for common paste damage.
 
-    Accepted recovery is limited to a missing outer brace or two byte-for-byte
+    Accepted recovery is limited to a missing outer brace or two semantically
     equivalent JSON objects pasted consecutively. Conflicting objects and
     arbitrary trailing content remain hard failures.
     """
     value = creds_json.strip()
+    quote_chars = ('"', "'")
     candidates = {
         "raw": value,
         "add_open": "{" + value,
@@ -22,6 +23,7 @@ def _load_credentials(creds_json: str) -> dict:
     missing = object()
     credentials = missing
     errors = []
+    segment_diagnostics = []
     seen = set()
     for label, candidate in candidates.items():
         if candidate in seen:
@@ -48,18 +50,40 @@ def _load_credentials(creds_json: str) -> dict:
                 remainder + "}",
                 "{" + remainder + "}",
             )
+            valid_second_seen = False
             for second_candidate in dict.fromkeys(remainder_candidates):
                 try:
                     second = json.loads(second_candidate)
                 except json.JSONDecodeError:
                     continue
+                valid_second_seen = True
+                segment_diagnostics.append(
+                    "first_type=" + type(first).__name__
+                    + ",second_type=" + type(second).__name__
+                    + f",same={first == second}"
+                    + f",first_fields={len(first) if isinstance(first, dict) else -1}"
+                    + f",second_fields={len(second) if isinstance(second, dict) else -1}"
+                    + ",fields_same="
+                    + str(
+                        set(first) == set(second)
+                        if isinstance(first, dict) and isinstance(second, dict)
+                        else False
+                    )
+                )
                 if isinstance(first, dict) and first == second:
                     credentials = first
                     break
+            if not valid_second_seen:
+                segment_diagnostics.append(
+                    f"first_type={type(first).__name__},remaining_chars={len(remainder)},"
+                    f"rem_open_brace={remainder.startswith('{')},"
+                    f"rem_close_brace={remainder.endswith('}')},"
+                    f"rem_open_quote={remainder.startswith(quote_chars)},"
+                    f"rem_close_quote={remainder.endswith(quote_chars)}"
+                )
             if credentials is not missing:
                 break
     if credentials is missing:
-        quote_chars = ('"', "'")
         shape = (
             f"chars={len(value)},lines={value.count(chr(10)) + 1},"
             f"open_brace={value.startswith('{')},close_brace={value.endswith('}')},"
@@ -68,7 +92,7 @@ def _load_credentials(creds_json: str) -> dict:
         )
         raise ValueError(
             "GOOGLE_CREDS_JSON must be valid JSON "
-            f"({shape}; attempts={';'.join(errors)})"
+            f"({shape}; attempts={';'.join(errors)}; segments={';'.join(segment_diagnostics)})"
         )
     if not isinstance(credentials, dict):
         raise ValueError("GOOGLE_CREDS_JSON must contain a JSON object")
