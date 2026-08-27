@@ -48,6 +48,9 @@ def _load_credentials(creds_json: str) -> dict:
             for literal_newline in ("\\n", "\\r\\n"):
                 if remainder.startswith(literal_newline):
                     remainder_fragments.append(remainder[len(literal_newline):])
+            assignment_prefix = "GOOGLE_CREDS_JSON="
+            if remainder.startswith(assignment_prefix):
+                remainder_fragments.append(remainder[len(assignment_prefix):].strip())
             remainder_candidates = []
             for fragment in remainder_fragments:
                 remainder_candidates.extend((

@@ -48,6 +48,23 @@ def test_load_credentials_accepts_duplicate_after_literal_newline_separator():
     assert _load_credentials(value) == credentials
 
 
+def test_load_credentials_accepts_identical_assignment_duplicate():
+    credentials = {"type": "service_account", "project_id": "example"}
+    compact = json.dumps(credentials)
+    value = compact[1:] + "\nGOOGLE_CREDS_JSON=" + compact
+
+    assert _load_credentials(value) == credentials
+
+
+def test_load_credentials_rejects_unrelated_assignment_prefix():
+    credentials = {"type": "service_account", "project_id": "example"}
+    compact = json.dumps(credentials)
+    value = compact[1:] + "\nOTHER_SECRET=" + compact
+
+    with pytest.raises(ValueError, match="must be valid JSON"):
+        _load_credentials(value)
+
+
 def test_load_credentials_rejects_conflicting_duplicate_objects():
     first = {"type": "service_account", "project_id": "one"}
     second = {"type": "service_account", "project_id": "two"}
