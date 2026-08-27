@@ -8,17 +8,36 @@ from google.oauth2.service_account import Credentials
 def _load_credentials(creds_json: str) -> dict:
     """Parse service-account JSON, including a paste missing either outer brace."""
     value = creds_json.strip()
-    candidates = (value, "{" + value, value + "}", "{" + value + "}")
+    candidates = {
+        "raw": value,
+        "add_open": "{" + value,
+        "add_close": value + "}",
+        "add_both": "{" + value + "}",
+    }
     missing = object()
     credentials = missing
-    for candidate in dict.fromkeys(candidates):
+    errors = []
+    seen = set()
+    for label, candidate in candidates.items():
+        if candidate in seen:
+            continue
+        seen.add(candidate)
         try:
             credentials = json.loads(candidate)
             break
-        except json.JSONDecodeError:
-            continue
+        except json.JSONDecodeError as exc:
+            errors.append(f"{label}:{exc.msg}@{exc.lineno}:{exc.colno}")
     if credentials is missing:
-        raise ValueError("GOOGLE_CREDS_JSON must be valid JSON")
+        shape = (
+            f"chars={len(value)},lines={value.count(chr(10)) + 1},"
+            f"open_brace={value.startswith('{')},close_brace={value.endswith('}')},"
+            f"open_quote={value.startswith(('\"', chr(39)))},"
+            f"close_quote={value.endswith(('\"', chr(39)))}"
+        )
+        raise ValueError(
+            "GOOGLE_CREDS_JSON must be valid JSON "
+            f"({shape}; attempts={';'.join(errors)})"
+        )
     if not isinstance(credentials, dict):
         raise ValueError("GOOGLE_CREDS_JSON must contain a JSON object")
     return credentials
