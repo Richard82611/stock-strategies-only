@@ -6,7 +6,12 @@ from google.oauth2.service_account import Credentials
 
 
 def _load_credentials(creds_json: str) -> dict:
-    """Parse service-account JSON, including a paste missing either outer brace."""
+    """Parse service-account JSON with narrow recovery for common paste damage.
+
+    Accepted recovery is limited to a missing outer brace or two byte-for-byte
+    equivalent JSON objects pasted consecutively. Conflicting objects and
+    arbitrary trailing content remain hard failures.
+    """
     value = creds_json.strip()
     candidates = {
         "raw": value,
@@ -27,6 +32,32 @@ def _load_credentials(creds_json: str) -> dict:
             break
         except json.JSONDecodeError as exc:
             errors.append(f"{label}:{exc.msg}@{exc.lineno}:{exc.colno}")
+    if credentials is missing:
+        decoder = json.JSONDecoder()
+        for candidate in candidates.values():
+            try:
+                first, end = decoder.raw_decode(candidate)
+            except json.JSONDecodeError:
+                continue
+            remainder = candidate[end:].strip()
+            if not remainder:
+                continue
+            remainder_candidates = (
+                remainder,
+                "{" + remainder,
+                remainder + "}",
+                "{" + remainder + "}",
+            )
+            for second_candidate in dict.fromkeys(remainder_candidates):
+                try:
+                    second = json.loads(second_candidate)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(first, dict) and first == second:
+                    credentials = first
+                    break
+            if credentials is not missing:
+                break
     if credentials is missing:
         quote_chars = ('"', "'")
         shape = (
