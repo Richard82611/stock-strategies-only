@@ -44,12 +44,18 @@ def _load_credentials(creds_json: str) -> dict:
             remainder = candidate[end:].strip()
             if not remainder:
                 continue
-            remainder_candidates = (
-                remainder,
-                "{" + remainder,
-                remainder + "}",
-                "{" + remainder + "}",
-            )
+            remainder_fragments = [remainder]
+            for literal_newline in ("\\n", "\\r\\n"):
+                if remainder.startswith(literal_newline):
+                    remainder_fragments.append(remainder[len(literal_newline):])
+            remainder_candidates = []
+            for fragment in remainder_fragments:
+                remainder_candidates.extend((
+                    fragment,
+                    "{" + fragment,
+                    fragment + "}",
+                    "{" + fragment + "}",
+                ))
             valid_second_seen = False
             for second_candidate in dict.fromkeys(remainder_candidates):
                 try:
@@ -79,7 +85,8 @@ def _load_credentials(creds_json: str) -> dict:
                     f"rem_open_brace={remainder.startswith('{')},"
                     f"rem_close_brace={remainder.endswith('}')},"
                     f"rem_open_quote={remainder.startswith(quote_chars)},"
-                    f"rem_close_quote={remainder.endswith(quote_chars)}"
+                    f"rem_close_quote={remainder.endswith(quote_chars)},"
+                    f"rem_prefix_ord={','.join(str(ord(char)) for char in remainder[:8])}"
                 )
             if credentials is not missing:
                 break

@@ -40,6 +40,14 @@ def test_load_credentials_accepts_identical_duplicate_with_missing_opening_brace
     assert _load_credentials(value) == credentials
 
 
+def test_load_credentials_accepts_duplicate_after_literal_newline_separator():
+    credentials = {"type": "service_account", "project_id": "example"}
+    compact = json.dumps(credentials)
+    value = compact[1:] + "\n\\n" + compact[1:]
+
+    assert _load_credentials(value) == credentials
+
+
 def test_load_credentials_rejects_conflicting_duplicate_objects():
     first = {"type": "service_account", "project_id": "one"}
     second = {"type": "service_account", "project_id": "two"}
