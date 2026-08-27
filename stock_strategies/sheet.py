@@ -5,9 +5,50 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 
+def _parse_credential_object(value: str) -> dict:
+    """Parse one object, allowing only a missing opening and/or closing brace."""
+    candidates = (value, "{" + value, value + "}", "{" + value + "}")
+    errors = []
+    for candidate in dict.fromkeys(candidates):
+        try:
+            parsed = json.loads(candidate)
+        except json.JSONDecodeError as exc:
+            errors.append(f"{exc.msg}@{exc.lineno}:{exc.colno}")
+            continue
+        if not isinstance(parsed, dict):
+            raise ValueError("GOOGLE_CREDS_JSON must contain a JSON object")
+        return parsed
+    raise ValueError(
+        "GOOGLE_CREDS_JSON must be valid JSON "
+        f"(attempts={';'.join(errors)})"
+    )
+
+
+def _load_credentials(creds_json: str) -> dict:
+    """Parse one credential or the known duplicated assignment paste shape."""
+    value = creds_json.strip()
+    try:
+        return _parse_credential_object(value)
+    except ValueError as exc:
+        primary_message = str(exc)
+
+    separators = ("\nGOOGLE_CREDS_JSON=", "\\nGOOGLE_CREDS_JSON=")
+    for separator in separators:
+        if value.count(separator) != 1:
+            continue
+        first_raw, second_raw = value.split(separator, 1)
+        first = _parse_credential_object(first_raw.strip())
+        second = _parse_credential_object(second_raw.strip())
+        if first != second:
+            raise ValueError("GOOGLE_CREDS_JSON contains conflicting credential objects")
+        return first
+
+    raise ValueError(primary_message)
+
+
 def get_gsheet():
     creds_json = os.environ["GOOGLE_CREDS_JSON"]
-    creds_dict = json.loads(creds_json)
+    creds_dict = _load_credentials(creds_json)
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",

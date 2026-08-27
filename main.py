@@ -57,6 +57,8 @@ def main():
     print(f"[{datetime.now()}] 讀取 watchlist...")
     watchlist = read_watchlist()
     print(f"  → {len(watchlist)} 檔啟用中")
+    if not watchlist:
+        raise RuntimeError("Watchlist 沒有啟用中的股票，停止空白排程")
 
     # 2. 取得大盤狀態（濾鏡）
     print("取得大盤狀態...")
@@ -79,6 +81,21 @@ def main():
         if r:
             results.append(r)
         time.sleep(0.6)
+
+    usable_dates = sorted({
+        str(r.get("date", "")).strip()
+        for r in results
+        if str(r.get("date", "")).strip()
+    })
+    error_count = sum(1 for r in results if r.get("action") == "ERROR")
+    if not usable_dates:
+        raise RuntimeError("沒有任何可驗證的行情資料日期，停止寫入與推播")
+    if error_count == len(results):
+        raise RuntimeError("所有標的資料取得或評估失敗，停止寫入與推播")
+    print(
+        f"[data-cutoff] 個股行情 {usable_dates[0]} ~ {usable_dates[-1]} | "
+        f"大盤 {market.get('date') or '未知'} | 夜盤 {(night or {}).get('date', '未知')}"
+    )
 
     # 4. 套用大盤濾鏡：跌破月線時 BUY 一律降為 WATCH
     downgraded = apply_market_filter(results, market)

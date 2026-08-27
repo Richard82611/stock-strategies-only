@@ -17,7 +17,19 @@ def send_telegram(text: str):
     }
     r = requests.post(url, json=payload, timeout=10)
     if not r.ok:
-        print(f"Telegram 送失敗: {r.text}", file=sys.stderr)
+        detail = str(r.text)[:300]
+        print(f"Telegram 送失敗: {detail}", file=sys.stderr)
+        raise RuntimeError(f"Telegram API request failed: HTTP {r.status_code}")
+
+
+def _report_data_date(signals: list[dict]) -> str:
+    """回報實際使用的最新行情日；沒有可驗證日期時明確標示未知。"""
+    dates = sorted({
+        str(s.get("date", "")).strip()
+        for s in signals
+        if str(s.get("date", "")).strip()
+    })
+    return dates[-1] if dates else "資料日期未知"
 
 
 def _trend_emoji(chg: float) -> str:
@@ -152,13 +164,15 @@ def format_messages(
     buys = [s for s in signals if s.get("action") == "BUY"]
     watches = [s for s in signals if s.get("action") == "WATCH"]
     skips = [s for s in signals if s.get("action") in ("SKIP", "ERROR")]
-    today = datetime.now().strftime("%Y/%m/%d")
+    run_date = datetime.now().strftime("%Y/%m/%d")
+    data_date = _report_data_date(signals)
     total = len(signals)
     messages = []
 
     # === 第一則：市場總覽 + 類股強弱 ===
     msg1 = []
-    msg1.append(f"📊 *V3.0 每日選股報告* {today}")
+    msg1.append(f"📊 *V3.0 每日選股報告* {data_date.replace('-', '/')}")
+    msg1.append(f"資料截止 {data_date} | 執行日 {run_date}")
     msg1.append(f"掃描 {total} 檔 | BUY {len(buys)} | WATCH {len(watches)} | SKIP {len(skips)}")
     msg1.append("")
 
@@ -282,7 +296,7 @@ def format_messages(
     messages.append("\n".join(msg3))
 
     # === 第四則：量價深度解析 (V3.1) ===
-    msg4 = _format_deep_analysis(signals, today)
+    msg4 = _format_deep_analysis(signals, data_date.replace("-", "/"))
     messages.append(msg4)
 
     return messages

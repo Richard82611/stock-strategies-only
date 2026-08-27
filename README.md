@@ -361,6 +361,8 @@ uv run python main.py
 ```
 
 成功的話，你的 Telegram 會收到選股通知，Google Sheet 的 Signals 分頁會出現新資料。
+`Signals.date` 與 Actions 日誌中的 `[data-cutoff]` 都採用實際行情最後日期，
+不會把週末、休市日或手動重跑的執行日誤標成行情資料日。
 
 ### Step 7：GitHub Actions 自動排程
 
