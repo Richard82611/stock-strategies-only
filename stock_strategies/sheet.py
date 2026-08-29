@@ -25,7 +25,7 @@ def _parse_credential_object(value: str) -> dict:
 
 
 def _load_credentials(creds_json: str) -> dict:
-    """Parse one credential or the known duplicated assignment paste shape."""
+    """Parse one credential or an identical duplicated credential paste."""
     value = creds_json.strip()
     try:
         return _parse_credential_object(value)
@@ -39,6 +39,22 @@ def _load_credentials(creds_json: str) -> dict:
         first_raw, second_raw = value.split(separator, 1)
         first = _parse_credential_object(first_raw.strip())
         second = _parse_credential_object(second_raw.strip())
+        if first != second:
+            raise ValueError("GOOGLE_CREDS_JSON contains conflicting credential objects")
+        return first
+
+    decoder = json.JSONDecoder()
+    for prefix in ("", "{"):
+        try:
+            first, end = decoder.raw_decode(prefix + value)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(first, dict):
+            continue
+        remainder = value[end - len(prefix):].strip()
+        if not remainder:
+            continue
+        second = _parse_credential_object(remainder)
         if first != second:
             raise ValueError("GOOGLE_CREDS_JSON contains conflicting credential objects")
         return first
