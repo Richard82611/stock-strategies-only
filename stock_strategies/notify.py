@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 from datetime import datetime
 
 import numpy as np
@@ -8,18 +9,44 @@ import requests
 from .config import CONFIG, TELEGRAM_API
 
 
-def send_telegram(text: str):
+TELEGRAM_RETRY_DELAYS = (2, 4, 8)
+TELEGRAM_TIMEOUT = 10
+
+
+def send_telegram(text: str) -> bool:
+    """推播到 Telegram。
+
+    網路錯誤、逾時、HTTP 429/5xx 屬暫時性失敗：首次失敗後重試 3 次，依序退避 2、4、8 秒；
+    重試都失敗只記 warning 並回傳 False，不讓整個 job 失敗。
+    其他 HTTP 4xx（例如 token 或 chat_id 設錯）是設定錯誤，照舊丟 RuntimeError，避免無聲失敗。
+    """
     url = TELEGRAM_API.format(token=os.environ["TELEGRAM_BOT_TOKEN"])
     payload = {
         "chat_id": os.environ["TELEGRAM_CHAT_ID"],
         "text": text,
         "parse_mode": "Markdown",
     }
-    r = requests.post(url, json=payload, timeout=10)
-    if not r.ok:
-        detail = str(r.text)[:300]
-        print(f"Telegram 送失敗: {detail}", file=sys.stderr)
-        raise RuntimeError(f"Telegram API request failed: HTTP {r.status_code}")
+    attempts = len(TELEGRAM_RETRY_DELAYS) + 1  # 首次 + 重試 3 次
+    last_error = ""
+    for attempt in range(1, attempts + 1):
+        try:
+            r = requests.post(url, json=payload, timeout=TELEGRAM_TIMEOUT)
+        except requests.exceptions.RequestException as exc:
+            last_error = type(exc).__name__
+        else:
+            if r.ok:
+                return True
+            detail = str(r.text)[:300]
+            print(f"Telegram 送失敗: {detail}", file=sys.stderr)
+            if r.status_code != 429 and r.status_code < 500:
+                raise RuntimeError(f"Telegram API request failed: HTTP {r.status_code}")
+            last_error = f"HTTP {r.status_code}"
+        if attempt < attempts:
+            delay = TELEGRAM_RETRY_DELAYS[attempt - 1]
+            print(f"WARNING: Telegram 第 {attempt}/{attempts} 次失敗（{last_error}），{delay} 秒後重試", file=sys.stderr)
+            time.sleep(delay)
+    print(f"::warning::Telegram 推播 {attempts} 次皆失敗（{last_error}），略過推播，不讓 job 失敗", file=sys.stderr)
+    return False
 
 
 def _report_data_date(signals: list[dict]) -> str:
