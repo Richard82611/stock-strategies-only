@@ -40,6 +40,23 @@ def test_load_credentials_accepts_identical_assignment_duplicate():
     assert _load_credentials(value) == credentials
 
 
+def test_load_credentials_accepts_identical_concatenated_duplicate():
+    credentials = {"type": "service_account", "project_id": "example"}
+    compact = json.dumps(credentials)
+    value = compact[1:] + "\n" + compact[1:]
+
+    assert _load_credentials(value) == credentials
+
+
+def test_load_credentials_rejects_conflicting_concatenated_duplicate():
+    first = json.dumps({"type": "service_account", "project_id": "one"})
+    second = json.dumps({"type": "service_account", "project_id": "two"})
+    value = first[1:] + "\n" + second[1:]
+
+    with pytest.raises(ValueError, match="conflicting credential objects"):
+        _load_credentials(value)
+
+
 def test_load_credentials_rejects_conflicting_assignment_duplicate():
     first = json.dumps({"type": "service_account", "project_id": "one"})
     second = json.dumps({"type": "service_account", "project_id": "two"})
